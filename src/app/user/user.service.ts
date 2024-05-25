@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { ClientSession, Model } from 'mongoose';
 import User from './schema/user.schema';
 import { MessageService } from '../message/message.service';
 import { from, map, Observable } from 'rxjs';
@@ -47,11 +47,11 @@ export class UserService {
       ? [ERole.CUSTOMER]
       : [ERole.ADMIN, ERole.STAFF];
 
-    const session = await this.userSchema.db.startSession();
+    const session: ClientSession = await this.userSchema.db.startSession();
     session.startTransaction();
 
     try {
-      const user = await new this.userSchema({
+      const user: User = await new this.userSchema({
         email,
         password,
         createdAt,
@@ -119,13 +119,16 @@ export class UserService {
       throw new BadRequestException('Password and Confirm Password Not Same');
     }
 
-    const user = await this.userSchema.findOne({ id });
+    const user: User = await this.userSchema.findOne({ id });
 
     if (!user) {
       throw new NotFoundException('User Notfound');
     }
 
-    const passwordIsValid = await bcrypt.compare(password, user.password);
+    const passwordIsValid: boolean = await bcrypt.compare(
+      password,
+      user.password,
+    );
 
     if (!passwordIsValid) {
       throw new BadRequestException('Password Wrong!');

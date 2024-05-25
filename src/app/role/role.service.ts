@@ -15,7 +15,7 @@ export class RoleService {
     const existingRole: Role = await this.roleModel.findOne({ role });
 
     if (!existingRole) {
-      const newRole = await new this.roleModel({
+      const newRole: Role = await new this.roleModel({
         role: role,
       }).save({ session });
 
