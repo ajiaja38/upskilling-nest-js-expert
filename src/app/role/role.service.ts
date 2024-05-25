@@ -55,4 +55,11 @@ export class RoleService {
 
     return roleTrx;
   }
+
+  async deleteRoleTrxByUserId(
+    userId: string,
+    session?: ClientSession,
+  ): Promise<void> {
+    await this.roleTrxSchema.deleteMany({ userId }, { session });
+  }
 }

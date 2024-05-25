@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseIntPipe,
@@ -51,5 +52,10 @@ export class UserController {
     @Body() updatePasswordDto: UpdatePasswordDto,
   ): Promise<void> {
     return this.userService.updatePassword(id, updatePasswordDto);
+  }
+
+  @Delete(':id')
+  deleteUserHandler(@Param('id') id: string): Promise<void> {
+    return this.userService.deleteUser(id);
   }
 }

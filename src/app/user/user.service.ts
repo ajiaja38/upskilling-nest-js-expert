@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -75,7 +76,6 @@ export class UserService {
       }
 
       await session.commitTransaction();
-      session.endSession();
 
       return {
         email: user.email,
@@ -83,8 +83,9 @@ export class UserService {
       };
     } catch (error) {
       await session.abortTransaction();
-      session.endSession();
       throw new BadRequestException(error.message);
+    } finally {
+      session.endSession();
     }
   }
 
@@ -125,15 +126,15 @@ export class UserService {
       }
 
       await session.commitTransaction();
-      session.endSession();
 
       return results
         .filter((result) => result.roles.includes(ERole.CUSTOMER))
         .reverse();
     } catch (error) {
       await session.abortTransaction();
-      session.endSession();
       throw new BadRequestException(error.message);
+    } finally {
+      session.endSession();
     }
   }
 
@@ -230,6 +231,8 @@ export class UserService {
       throw new NotFoundException('User Not Found');
     }
 
+    this.messageService.setMessage('Get User Successfully');
+
     return user[0];
   }
 
@@ -313,5 +316,29 @@ export class UserService {
     );
 
     this.messageService.setMessage('Update Password Successfully');
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    const session: ClientSession = await this.userSchema.db.startSession();
+    session.startTransaction();
+
+    try {
+      const user: User = await this.userSchema.findOne({ id }, {}, { session });
+
+      if (!user) {
+        throw new NotFoundException('User Not Found');
+      }
+
+      await this.userSchema.deleteOne({ id }, { session });
+      await this.roleService.deleteRoleTrxByUserId(id, session);
+
+      await session.commitTransaction();
+      this.messageService.setMessage('Delete User Successfully');
+    } catch (error) {
+      await session.abortTransaction();
+      throw new InternalServerErrorException(error.message);
+    } finally {
+      session.endSession();
+    }
   }
 }
