@@ -5,6 +5,7 @@ import {
   FastifyAdapter,
   NestFastifyApplication,
 } from '@nestjs/platform-fastify';
+import fastifyHelmet from '@fastify/helmet';
 
 async function bootstrap() {
   const port: string | number = process.env.PORT || 3000;
@@ -15,12 +16,16 @@ async function bootstrap() {
     new FastifyAdapter(),
   );
 
+  app.register(fastifyHelmet, {
+    contentSecurityPolicy: false,
+    xssFilter: true,
+  });
   app.enableCors();
   app.useGlobalPipes(new ValidationPipe());
   app.setGlobalPrefix(globalPrefix);
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0');
   Logger.log(
-    `🚀 Application listening on http://127.0.0.1:${port}${globalPrefix}`,
+    `🚀 Application listening on http://0.0.0.0:${port}${globalPrefix}`,
   );
 }
 bootstrap();

@@ -16,24 +16,22 @@ export class ResponseInterceptor implements NestInterceptor {
     next: CallHandler<any>,
   ): Observable<any> {
     return next.handle().pipe(
-      map((data) => {
+      map((res) => {
         const response = {
           code: context.switchToHttp().getResponse().statusCode,
           status: true,
           message:
-            this.messageService.getMessage() || 'Berhasil Memuat Permintaan',
+            this.messageService.getMessage() || 'Successfully retrieve data',
         };
 
-        if (data) {
-          if (Array.isArray(data)) {
-            response['data'] = data;
-          } else if (data.totalPages || data.page || data.totalData) {
-            response['totalPages'] = data.totalPages;
-            response['page'] = data.page;
-            response['totalData'] = data.totalData;
-            response['data'] = data.data;
+        if (res) {
+          if (Array.isArray(res)) {
+            response['data'] = res;
+          } else if (res.meta) {
+            response['data'] = res.data;
+            response['meta'] = res.meta;
           } else {
-            response['data'] = data;
+            response['data'] = res;
           }
         }
 

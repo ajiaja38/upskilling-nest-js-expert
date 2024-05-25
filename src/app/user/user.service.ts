@@ -7,7 +7,6 @@ import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Model } from 'mongoose';
 import User from './schema/user.schema';
 import { MessageService } from '../message/message.service';
-import { from, map, Observable } from 'rxjs';
 import CreateUserDto from './dto/createUser.dto';
 import * as bcrypt from 'bcrypt';
 import { TimezoneService } from '../timezone/timezone.service';
@@ -16,8 +15,12 @@ import { RoleService } from '../role/role.service';
 import UserRoleTrx from '../role/schema/userRole.schema';
 import Role from '../role/schema/role.schema';
 import IResponseRegister from './dto/responseRegister.dto';
-import { IGetUser } from './dto/responseGetUser.dto';
+import { IGetUserDetail } from './dto/responseGetUser.dto';
 import UpdatePasswordDto from './dto/updatePassword.dto';
+import {
+  ImetaPagination,
+  IResponsePageWrapper,
+} from 'src/utils/interface/responsePageWrapper.interface';
 
 @Injectable()
 export class UserService {
@@ -81,41 +84,210 @@ export class UserService {
     } catch (error) {
       await session.abortTransaction();
       session.endSession();
-      throw new BadRequestException('Failed Create User, Transaction aborted');
+      throw new BadRequestException(error.message);
     }
   }
 
-  async getAllUser(): Promise<IGetUser[]> {
+  async getAllUser(): Promise<IGetUserDetail[]> {
     this.messageService.setMessage('Get All User Successfully');
-    return await this.userSchema
-      .find()
-      .select({ _id: 0, id: 1, email: 1, createdAt: 1, updatedAt: 1 });
-  }
 
-  getUserById(id: string): Observable<User> {
-    return from(
-      this.userSchema
-        .findOne({ id })
-        .select({ _id: 0, id: 1, email: 1, createdAt: 1, updatedAt: 1 }),
-    ).pipe(
-      map((user) => {
-        if (!user) {
-          throw new NotFoundException('Maaf, User tidak ditemukan');
+    const session: ClientSession = await this.userSchema.db.startSession();
+    session.startTransaction();
+
+    try {
+      const users: User[] = await this.userSchema.find({}, {}, { session });
+      let results: IGetUserDetail[] = [];
+
+      for (const user of users) {
+        const roleTrxs: UserRoleTrx[] =
+          await this.roleService.getRoleTrxByUserId(user.id, session);
+
+        let roles: ERole[] = [];
+
+        for (const trx of roleTrxs) {
+          const role: Role = await this.roleService.getRoleById(
+            trx.roleId,
+            session,
+          );
+          roles = [...roles, role.role];
         }
 
-        this.messageService.setMessage('Get User Successfully');
-        return user;
-      }),
-    );
+        results = [
+          ...results,
+          {
+            id: user.id,
+            email: user.email,
+            roles,
+            createdAt: user.createdAt,
+            updatedAt: user.updatedAt,
+          },
+        ];
+      }
+
+      await session.commitTransaction();
+      session.endSession();
+
+      return results
+        .filter((result) => result.roles.includes(ERole.CUSTOMER))
+        .reverse();
+    } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  async getAllUserPagination(
+    page: number,
+    limit: number,
+    search: string,
+  ): Promise<IResponsePageWrapper<IGetUserDetail[]>> {
+    this.messageService.setMessage('Get All User Successfully');
+
+    const skip = (page - 1) * limit;
+
+    const [users, totalData] = await Promise.all([
+      this.userSchema
+        .aggregate([
+          {
+            $lookup: {
+              from: 'roleTransaction',
+              localField: 'id',
+              foreignField: 'userId',
+              as: 'roleTransaction',
+            },
+          },
+          { $unwind: '$roleTransaction' },
+          {
+            $lookup: {
+              from: 'roles',
+              localField: 'roleTransaction.roleId',
+              foreignField: 'id',
+              as: 'roles',
+            },
+          },
+          {
+            $match: {
+              'roles.role': 'Customer',
+              email: { $regex: new RegExp(search, 'i') },
+            },
+          },
+          {
+            $group: {
+              _id: '$id',
+              email: { $first: '$email' },
+              createdAt: { $first: '$createdAt' },
+              updatedAt: { $first: '$updatedAt' },
+              roles: { $push: '$roles.role' },
+            },
+          },
+          {
+            $project: {
+              _id: 0,
+              id: '$_id',
+              email: 1,
+              roles: {
+                $reduce: {
+                  input: '$roles',
+                  initialValue: [],
+                  in: { $concatArrays: ['$$value', '$$this'] },
+                },
+              },
+              createdAt: 1,
+              updatedAt: 1,
+            },
+          },
+          { $sort: { createdAt: -1 } },
+          { $skip: skip },
+          { $limit: limit },
+        ])
+        .exec(),
+      this.userSchema.countDocuments().exec(),
+    ]);
+
+    const totalPages = Math.ceil(totalData / limit);
+
+    const meta: ImetaPagination = {
+      totalPages,
+      totalData,
+      totalDataPerPage: users.length,
+      page,
+      limit,
+    };
+
+    const response: IResponsePageWrapper<IGetUserDetail[]> = {
+      data: users,
+      meta,
+    };
+
+    return response;
+  }
+
+  async getUserById(id: string): Promise<IGetUserDetail> {
+    const user: IGetUserDetail[] = await this.getUserAggregate(id);
+
+    if (!user.length) {
+      throw new NotFoundException('User Not Found');
+    }
+
+    return user[0];
+  }
+
+  async getUserAggregate(id?: string): Promise<IGetUserDetail[]> {
+    return await this.userSchema.aggregate([
+      ...(id ? [{ $match: { id } }] : []),
+      {
+        $lookup: {
+          from: 'roleTransaction',
+          localField: 'id',
+          foreignField: 'userId',
+          as: 'roleTransaction',
+        },
+      },
+      { $unwind: '$roleTransaction' },
+      {
+        $lookup: {
+          from: 'roles',
+          localField: 'roleTransaction.roleId',
+          foreignField: 'id',
+          as: 'roles',
+        },
+      },
+      {
+        $group: {
+          _id: '$id',
+          email: { $first: '$email' },
+          createdAt: { $first: '$createdAt' },
+          updatedAt: { $first: '$updatedAt' },
+          roles: { $push: '$roles.role' },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          id: '$_id',
+          email: 1,
+          roles: {
+            $reduce: {
+              input: '$roles',
+              initialValue: [],
+              in: { $concatArrays: ['$$value', '$$this'] },
+            },
+          },
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      },
+    ]);
   }
 
   async updatePassword(
     id: string,
     updatePasswordDto: UpdatePasswordDto,
   ): Promise<void> {
-    const { password, confirmPassword } = updatePasswordDto;
+    const { oldPassword, newPassword, confirmPassword } = updatePasswordDto;
 
-    if (password !== confirmPassword) {
+    if (newPassword !== confirmPassword) {
       throw new BadRequestException('Password and Confirm Password Not Same');
     }
 
@@ -126,7 +298,7 @@ export class UserService {
     }
 
     const passwordIsValid: boolean = await bcrypt.compare(
-      password,
+      oldPassword,
       user.password,
     );
 
@@ -134,6 +306,12 @@ export class UserService {
       throw new BadRequestException('Password Wrong!');
     }
 
-    await this.userSchema.findOneAndUpdate({ id }, { password }, { new: true });
+    await this.userSchema.findOneAndUpdate(
+      { id },
+      { password: await bcrypt.hash(newPassword, 12) },
+      { new: true },
+    );
+
+    this.messageService.setMessage('Update Password Successfully');
   }
 }
