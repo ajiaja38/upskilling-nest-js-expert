@@ -20,6 +20,8 @@ import { JwtAuthGuard } from 'src/guard/jwt-auth/jwt-auth.guard';
 import { RoleGuard } from 'src/guard/role/role.guard';
 import { Roles } from 'src/decorators/Roles.decorator';
 import { ERole } from 'src/utils/enum/role.enum';
+import { User } from 'src/decorators/User.decorator';
+import { IJwtPayload } from 'src/utils/interface/jwtPayload.interface';
 
 @Controller('user')
 export class UserController {
@@ -40,6 +42,8 @@ export class UserController {
   }
 
   @Get('/pagination/option')
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(ERole.ADMIN, ERole.STAFF)
   getAllUsersHandlerPagination(
     @Query('page', ParseIntPipe) page: number,
     @Query('limit', ParseIntPipe) limit: number,
@@ -49,13 +53,19 @@ export class UserController {
   }
 
   @Get(':id')
-  @UseGuards(JwtAuthGuard, RoleGuard)
-  @Roles(ERole.CUSTOMER)
+  @UseGuards(JwtAuthGuard)
   getUserByIdHandler(@Param('id') id: string): Promise<IGetUserDetail> {
     return this.userService.getUserById(id);
   }
 
+  @Get('/profile')
+  @UseGuards(JwtAuthGuard)
+  getProfileHandler(@User() user: IJwtPayload): Promise<IGetUserDetail> {
+    return this.userService.getUserById(user.id);
+  }
+
   @Put(':id/password')
+  @UseGuards(JwtAuthGuard)
   updatePasswordHandler(
     @Param('id') id: string,
     @Body() updatePasswordDto: UpdatePasswordDto,
@@ -64,6 +74,8 @@ export class UserController {
   }
 
   @Delete(':id')
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(ERole.ADMIN)
   deleteUserHandler(@Param('id') id: string): Promise<void> {
     return this.userService.deleteUser(id);
   }

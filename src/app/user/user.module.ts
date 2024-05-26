@@ -7,6 +7,7 @@ import { MessageModule } from '../message/message.module';
 import { TimezoneModule } from '../timezone/timezone.module';
 import { RoleModule } from '../role/role.module';
 import UserRoleTrx, { UserRoleTrxSchema } from '../role/schema/userRole.schema';
+import { CustomerModule } from '../customer/customer.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import UserRoleTrx, { UserRoleTrxSchema } from '../role/schema/userRole.schema';
     MessageModule,
     TimezoneModule,
     RoleModule,
+    CustomerModule,
   ],
   controllers: [UserController],
   providers: [UserService],

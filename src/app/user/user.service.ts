@@ -27,6 +27,7 @@ import LoginDto from '../auth/dto/login.dto';
 import { IJwtPayload } from 'src/utils/interface/jwtPayload.interface';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
+import { CustomerService } from '../customer/customer.service';
 
 @Injectable()
 export class UserService {
@@ -40,6 +41,7 @@ export class UserService {
     @Inject(CACHE_MANAGER)
     private readonly cacheService: Cache,
 
+    private readonly customerService: CustomerService,
     private readonly roleService: RoleService,
     private readonly messageService: MessageService,
     private readonly timeZoneService: TimezoneService,
@@ -69,6 +71,14 @@ export class UserService {
         createdAt,
         updatedAt,
       }).save({ session });
+
+      if (isCustomer)
+        await this.customerService.createCustomer(
+          createUserDto.firstName,
+          createUserDto.lastName,
+          user.id,
+          session,
+        );
 
       const userRole: ERole[] = [];
 
@@ -138,13 +148,15 @@ export class UserService {
         ];
       }
 
-      await session.commitTransaction();
-
-      await this.cacheService.set('allUser', results, 60000);
-
-      return results
+      const returnResult: IGetUserDetail[] = results
         .filter((result) => result.roles.includes(ERole.CUSTOMER))
         .reverse();
+
+      await session.commitTransaction();
+
+      await this.cacheService.set('allUser', returnResult, 60000);
+
+      return returnResult;
     } catch (error) {
       await session.abortTransaction();
       throw new BadRequestException(error.message);
@@ -218,7 +230,39 @@ export class UserService {
           { $limit: limit },
         ])
         .exec(),
-      this.userSchema.countDocuments().exec(),
+      this.userSchema
+        .aggregate([
+          {
+            $lookup: {
+              from: 'roleTransaction',
+              localField: 'id',
+              foreignField: 'userId',
+              as: 'roleTransaction',
+            },
+          },
+          { $unwind: '$roleTransaction' },
+          {
+            $lookup: {
+              from: 'roles',
+              localField: 'roleTransaction.roleId',
+              foreignField: 'id',
+              as: 'roles',
+            },
+          },
+          {
+            $match: {
+              'roles.role': 'Customer',
+              email: { $regex: new RegExp(search, 'i') },
+            },
+          },
+          {
+            $group: {
+              _id: '$id',
+            },
+          },
+        ])
+        .exec()
+        .then((result) => result.length),
     ]);
 
     const totalPages = Math.ceil(totalData / limit);
@@ -343,6 +387,7 @@ export class UserService {
 
       await this.userSchema.deleteOne({ id }, { session });
       await this.roleService.deleteRoleTrxByUserId(id, session);
+      await this.customerService.deleteCustomer(id, session);
 
       await session.commitTransaction();
       this.messageService.setMessage('Delete User Successfully');
