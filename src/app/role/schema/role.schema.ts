@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { ERole } from 'src/utils/enum/role.enum';
+import { ERole } from '../../../utils/enum/role.enum';
 import { v4 as uuidv4 } from 'uuid';
 
 @Schema({

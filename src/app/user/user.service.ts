@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -11,7 +12,7 @@ import { MessageService } from '../message/message.service';
 import CreateUserDto from './dto/createUser.dto';
 import * as bcrypt from 'bcrypt';
 import { TimezoneService } from '../timezone/timezone.service';
-import { ERole } from 'src/utils/enum/role.enum';
+import { ERole } from '../../utils/enum/role.enum';
 import { RoleService } from '../role/role.service';
 import UserRoleTrx from '../role/schema/userRole.schema';
 import Role from '../role/schema/role.schema';
@@ -22,6 +23,10 @@ import {
   ImetaPagination,
   IResponsePageWrapper,
 } from 'src/utils/interface/responsePageWrapper.interface';
+import LoginDto from '../auth/dto/login.dto';
+import { IJwtPayload } from 'src/utils/interface/jwtPayload.interface';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 
 @Injectable()
 export class UserService {
@@ -31,6 +36,9 @@ export class UserService {
 
     @InjectModel(UserRoleTrx.name)
     private readonly userRoleTrxSchema: Model<UserRoleTrx>,
+
+    @Inject(CACHE_MANAGER)
+    private readonly cacheService: Cache,
 
     private readonly roleService: RoleService,
     private readonly messageService: MessageService,
@@ -92,6 +100,11 @@ export class UserService {
   async getAllUser(): Promise<IGetUserDetail[]> {
     this.messageService.setMessage('Get All User Successfully');
 
+    const cachedData: IGetUserDetail[] =
+      await this.cacheService.get<IGetUserDetail[]>('allUser');
+
+    if (cachedData) return cachedData;
+
     const session: ClientSession = await this.userSchema.db.startSession();
     session.startTransaction();
 
@@ -126,6 +139,8 @@ export class UserService {
       }
 
       await session.commitTransaction();
+
+      await this.cacheService.set('allUser', results, 60000);
 
       return results
         .filter((result) => result.roles.includes(ERole.CUSTOMER))
@@ -225,14 +240,18 @@ export class UserService {
   }
 
   async getUserById(id: string): Promise<IGetUserDetail> {
+    const cachedData: IGetUserDetail =
+      await this.cacheService.get<IGetUserDetail>(id);
+
+    if (cachedData) return cachedData;
+
     const user: IGetUserDetail[] = await this.getUserAggregate(id);
 
-    if (!user.length) {
-      throw new NotFoundException('User Not Found');
-    }
+    if (!user.length) throw new NotFoundException('User Not Found');
+
+    await this.cacheService.set(id, user[0], 60000);
 
     this.messageService.setMessage('Get User Successfully');
-
     return user[0];
   }
 
@@ -290,24 +309,19 @@ export class UserService {
   ): Promise<void> {
     const { oldPassword, newPassword, confirmPassword } = updatePasswordDto;
 
-    if (newPassword !== confirmPassword) {
+    if (newPassword !== confirmPassword)
       throw new BadRequestException('Password and Confirm Password Not Same');
-    }
 
     const user: User = await this.userSchema.findOne({ id });
 
-    if (!user) {
-      throw new NotFoundException('User Notfound');
-    }
+    if (!user) throw new NotFoundException('User Notfound');
 
     const passwordIsValid: boolean = await bcrypt.compare(
       oldPassword,
       user.password,
     );
 
-    if (!passwordIsValid) {
-      throw new BadRequestException('Password Wrong!');
-    }
+    if (!passwordIsValid) throw new BadRequestException('Password Wrong!');
 
     await this.userSchema.findOneAndUpdate(
       { id },
@@ -325,9 +339,7 @@ export class UserService {
     try {
       const user: User = await this.userSchema.findOne({ id }, {}, { session });
 
-      if (!user) {
-        throw new NotFoundException('User Not Found');
-      }
+      if (!user) throw new NotFoundException('User Not Found');
 
       await this.userSchema.deleteOne({ id }, { session });
       await this.roleService.deleteRoleTrxByUserId(id, session);
@@ -340,5 +352,28 @@ export class UserService {
     } finally {
       session.endSession();
     }
+  }
+
+  async validateCredentials(loginDto: LoginDto): Promise<IJwtPayload> {
+    const { email, password } = loginDto;
+
+    const user: User = await this.userSchema.findOne({ email });
+
+    if (!user) throw new NotFoundException('User Not Found');
+
+    const isPasswordValid: boolean = await bcrypt.compare(
+      password,
+      user.password,
+    );
+
+    if (!isPasswordValid) throw new BadRequestException('Password Wrong!');
+
+    const { id, roles }: IGetUserDetail = await this.getUserById(user.id);
+
+    return {
+      id,
+      email,
+      roles,
+    };
   }
 }

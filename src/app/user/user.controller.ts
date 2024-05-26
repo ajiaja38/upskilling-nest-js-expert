@@ -8,6 +8,7 @@ import {
   Post,
   Put,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import IResponseRegister from './dto/responseRegister.dto';
@@ -15,6 +16,10 @@ import CreateUserDto from './dto/createUser.dto';
 import { IGetUserDetail } from './dto/responseGetUser.dto';
 import UpdatePasswordDto from './dto/updatePassword.dto';
 import { IResponsePageWrapper } from 'src/utils/interface/responsePageWrapper.interface';
+import { JwtAuthGuard } from 'src/guard/jwt-auth/jwt-auth.guard';
+import { RoleGuard } from 'src/guard/role/role.guard';
+import { Roles } from 'src/decorators/Roles.decorator';
+import { ERole } from 'src/utils/enum/role.enum';
 
 @Controller('user')
 export class UserController {
@@ -28,6 +33,8 @@ export class UserController {
   }
 
   @Get()
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(ERole.ADMIN, ERole.STAFF)
   getAllUserHandler(): Promise<IGetUserDetail[]> {
     return this.userService.getAllUser();
   }
@@ -42,6 +49,8 @@ export class UserController {
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles(ERole.CUSTOMER)
   getUserByIdHandler(@Param('id') id: string): Promise<IGetUserDetail> {
     return this.userService.getUserById(id);
   }

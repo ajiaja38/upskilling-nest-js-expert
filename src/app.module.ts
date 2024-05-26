@@ -12,6 +12,8 @@ import { ExceptionFilter } from './filter/exception.filter';
 import { ResponseInterceptor } from './interceptors/response.interceptor';
 import { MessageModule } from './app/message/message.module';
 import { TimezoneModule } from './app/timezone/timezone.module';
+import { CacheModule } from '@nestjs/cache-manager';
+import { redisStore } from 'cache-manager-redis-yet';
 
 @Module({
   imports: [
@@ -20,6 +22,17 @@ import { TimezoneModule } from './app/timezone/timezone.module';
       envFilePath: '.env',
     }),
     MongooseModule.forRoot(process.env.DATABASE),
+    CacheModule.registerAsync({
+      isGlobal: true,
+      useFactory: async () => ({
+        store: await redisStore({
+          socket: {
+            host: process.env.REDIS_HOST,
+            port: parseInt(process.env.REDIS_PORT),
+          },
+        }),
+      }),
+    }),
     UserModule,
     CustomerModule,
     AuthModule,

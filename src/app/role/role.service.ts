@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import Role from './schema/role.schema';
 import { ClientSession, Model } from 'mongoose';
-import { ERole } from 'src/utils/enum/role.enum';
+import { ERole } from '../../utils/enum/role.enum';
 import UserRoleTrx from './schema/userRole.schema';
 
 @Injectable()
