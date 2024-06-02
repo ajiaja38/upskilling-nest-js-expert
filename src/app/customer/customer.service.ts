@@ -7,6 +7,7 @@ import { TimezoneService } from '../timezone/timezone.service';
 import { MessageService } from '../message/message.service';
 import { IGetCustomer } from './dto/getCustomer.dto';
 import { CustomerStatus } from 'src/utils/enum/customerStatus.enum';
+import * as moment from 'moment';
 
 @Injectable()
 export class CustomerService {
@@ -25,6 +26,7 @@ export class CustomerService {
   ): Promise<void> {
     const createdAt: string = this.timeZoneService.getTimeZone();
     const updatedAt: string = createdAt;
+
     await new this.customerSchema({
       firstName,
       lastName,
@@ -34,10 +36,10 @@ export class CustomerService {
     }).save({ session });
   }
 
-  async getCustomerById(id: string): Promise<IGetCustomer> {
+  async getCustomerById(userId: string): Promise<IGetCustomer> {
     const customer: IGetCustomer[] = await this.customerSchema.aggregate([
       {
-        $match: { id },
+        $match: { userId },
       },
       {
         $lookup: {
@@ -54,6 +56,7 @@ export class CustomerService {
         $project: {
           _id: 0,
           id: 1,
+          userId: 1,
           firstName: 1,
           lastName: 1,
           birthDate: 1,
@@ -71,17 +74,18 @@ export class CustomerService {
   }
 
   async updateCustomer(
-    id: string,
+    userId: string,
     updateCustomerDto: UpdateCustomerDto,
   ): Promise<Customer> {
     const { firstName, lastName, birthDate, phoneNumber } = updateCustomerDto;
+
     const updatedCustomer: Customer =
       await this.customerSchema.findOneAndUpdate(
-        { id },
+        { userId },
         {
           firstName,
           lastName,
-          birthDate: new Date(birthDate),
+          birthDate: moment.utc(birthDate, 'YYYY-MM-DD').toDate(),
           phoneNumber,
           status: CustomerStatus.ACTIVE,
           updatedAt: this.timeZoneService.getTimeZone(),

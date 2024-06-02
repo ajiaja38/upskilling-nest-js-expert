@@ -13,6 +13,8 @@ export class ExceptionFilter implements ExceptionFilter {
   catch(exception: any, host: ArgumentsHost): void {
     const { httpAdapter } = this.httpAdapterHost;
     const context = host.switchToHttp();
+    const request = context.getRequest();
+    const response = context.getResponse();
 
     const httpStatus =
       exception instanceof HttpException
@@ -22,10 +24,10 @@ export class ExceptionFilter implements ExceptionFilter {
     const responseBody = {
       code: httpStatus,
       status: false,
-      message: exception.message,
-      path: httpAdapter.getRequestUrl(context.getRequest()),
+      message: exception.response?.message || exception.message,
+      path: httpAdapter.getRequestUrl(request),
     };
 
-    httpAdapter.reply(context.getResponse(), responseBody, httpStatus);
+    httpAdapter.reply(response, responseBody, httpStatus);
   }
 }
