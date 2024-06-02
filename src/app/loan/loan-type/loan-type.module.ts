@@ -12,5 +12,6 @@ import { LoanType, loanTypeSchema } from './schema/LoanType.schema';
   ],
   controllers: [LoanTypeController],
   providers: [LoanTypeService],
+  exports: [LoanTypeService],
 })
 export class LoanTypeModule {}

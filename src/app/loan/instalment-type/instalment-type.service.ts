@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { InstalmentType } from './schema/instalmentType.schema';
-import { Model } from 'mongoose';
+import { ClientSession, Model } from 'mongoose';
 import { InstalmentTypeDto } from './dto/instalment.dto';
 
 @Injectable()
@@ -21,9 +21,12 @@ export class InstalmentTypeService {
     return await this.instalmentTypeSchema.find();
   }
 
-  async getInstalmentTypeById(id: string): Promise<InstalmentType> {
+  async getInstalmentTypeById(
+    id: string,
+    session?: ClientSession,
+  ): Promise<InstalmentType> {
     const instalmentType: InstalmentType =
-      await this.instalmentTypeSchema.findOne({ id });
+      await this.instalmentTypeSchema.findOne({ id }, {}, { session });
 
     if (!instalmentType)
       throw new NotFoundException('InstalmentType Not Found');

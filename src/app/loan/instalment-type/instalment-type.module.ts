@@ -15,5 +15,6 @@ import {
   ],
   controllers: [InstalmentTypeController],
   providers: [InstalmentTypeService],
+  exports: [InstalmentTypeService],
 })
 export class InstalmentTypeModule {}

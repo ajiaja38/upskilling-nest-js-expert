@@ -36,38 +36,44 @@ export class CustomerService {
     }).save({ session });
   }
 
-  async getCustomerById(userId: string): Promise<IGetCustomer> {
-    const customer: IGetCustomer[] = await this.customerSchema.aggregate([
-      {
-        $match: { userId },
-      },
-      {
-        $lookup: {
-          from: 'users',
-          localField: 'userId',
-          foreignField: 'id',
-          as: 'user',
+  async getCustomerById(
+    userId?: string,
+    session?: ClientSession,
+  ): Promise<IGetCustomer> {
+    const customer: IGetCustomer[] = await this.customerSchema.aggregate(
+      [
+        {
+          $match: { userId },
         },
-      },
-      {
-        $unwind: '$user',
-      },
-      {
-        $project: {
-          _id: 0,
-          id: 1,
-          userId: 1,
-          firstName: 1,
-          lastName: 1,
-          birthDate: 1,
-          phoneNumber: 1,
-          status: 1,
-          email: '$user.email',
-          createdAt: 1,
-          updatedAt: 1,
+        {
+          $lookup: {
+            from: 'users',
+            localField: 'userId',
+            foreignField: 'id',
+            as: 'user',
+          },
         },
-      },
-    ]);
+        {
+          $unwind: '$user',
+        },
+        {
+          $project: {
+            _id: 0,
+            id: 1,
+            userId: 1,
+            firstName: 1,
+            lastName: 1,
+            birthDate: 1,
+            phoneNumber: 1,
+            status: 1,
+            email: '$user.email',
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        },
+      ],
+      { session },
+    );
 
     if (!customer.length) throw new NotFoundException('Customer Not Found');
     return customer[0];
