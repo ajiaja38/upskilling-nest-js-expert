@@ -16,6 +16,7 @@ import { LoanType } from '../loan-type/schema/LoanType.schema';
 import { InstalmentType } from '../instalment-type/schema/instalmentType.schema';
 import { IGetCustomer } from 'src/app/customer/dto/getCustomer.dto';
 import { ApproveRejectDto } from './dto/approveReject.dto';
+import { ILoanTrxGetAggregate } from './dto/loanTrxGetAggregate.dto';
 
 @Injectable()
 export class LoanTransactionService {
@@ -82,19 +83,17 @@ export class LoanTransactionService {
     }
   }
 
-  async actionLoanTrxByAdmin(
-    adminEmail: string,
-    id: string,
-    approveRejectDto: ApproveRejectDto,
-  ): Promise<ILoanTrx> {
-    const session: ClientSession =
-      await this.loanTransactionSchema.db.startSession();
-    session.startTransaction();
-
-    try {
-      const loanTrx = await this.loanTransactionSchema.aggregate([
+  async getLoanTrxAggregate(
+    id?: string,
+    customerId?: string,
+  ): Promise<ILoanTrxGetAggregate> {
+    const loanTrx: ILoanTrxGetAggregate[] =
+      await this.loanTransactionSchema.aggregate([
         {
-          $match: { id },
+          $match: {
+            id: id ? id : { $ne: null },
+            customerId: customerId ? customerId : { $ne: null },
+          },
         },
         {
           $lookup: {
@@ -125,15 +124,30 @@ export class LoanTransactionService {
         },
       ]);
 
-      if (!loanTrx.length)
-        throw new NotFoundException('Loan Transaction Not Found');
+    if (!loanTrx) throw new NotFoundException('Loan Transaction Not Found');
+
+    return loanTrx[0];
+  }
+
+  async actionLoanTrxByAdmin(
+    adminEmail: string,
+    trxId: string,
+    approveRejectDto: ApproveRejectDto,
+  ): Promise<ILoanTrx> {
+    const session: ClientSession =
+      await this.loanTransactionSchema.db.startSession();
+    session.startTransaction();
+
+    try {
+      const { id, customerUserId, loanTypeId, instalmentTypeId } =
+        await this.getLoanTrxAggregate(trxId);
 
       const { approvalStatus } = approveRejectDto;
       const updatedAt = this.timeZoneService.getTimeZone();
 
       const updatedLoanTrx: LoanTransaction =
         await this.loanTransactionSchema.findOneAndUpdate(
-          { id: loanTrx[0].id },
+          { id },
           { approvalStatus, approvedBy: adminEmail, updatedAt },
           { new: true },
         );
@@ -142,9 +156,9 @@ export class LoanTransactionService {
         throw new BadRequestException('Update Loan Transaction Failed');
 
       const { customer, loanType, instalmentType } = await this.queryLoanTrx(
-        loanTrx[0].customerUserId,
-        loanTrx[0].loanTypeId,
-        loanTrx[0].instalmentTypeId,
+        customerUserId,
+        loanTypeId,
+        instalmentTypeId,
         session,
       );
 
@@ -199,21 +213,32 @@ export class LoanTransactionService {
     loanType: LoanType,
     instalmentType: InstalmentType,
   ): ILoanTrx {
+    const {
+      id,
+      nominal,
+      approvedBy,
+      approvalStatus,
+      loanStatus,
+      description,
+      createdAt,
+      updatedAt,
+    } = loanTransaction;
+
     return {
-      id: loanTransaction.id,
+      id,
       loanType: loanType.loanType,
       instalmentType: instalmentType.instalmentType,
       customer: {
         name: `${customer.firstName} ${customer.lastName}`,
         email: customer.email,
       },
-      nominal: loanTransaction.nominal,
-      approvedBy: loanTransaction.approvedBy,
-      approvalStatus: loanTransaction.approvalStatus,
-      loanStatus: loanTransaction.loanStatus,
-      description: loanTransaction.description,
-      createdAt: loanTransaction.createdAt,
-      updatedAt: loanTransaction.updatedAt,
+      nominal,
+      approvedBy,
+      approvalStatus,
+      loanStatus,
+      description,
+      createdAt,
+      updatedAt,
     };
   }
 }
