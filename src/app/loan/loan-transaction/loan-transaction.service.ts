@@ -83,16 +83,63 @@ export class LoanTransactionService {
     }
   }
 
-  async getLoanTrxAggregate(
-    id?: string,
-    customerId?: string,
-  ): Promise<ILoanTrxGetAggregate> {
+  async getAllLoanTrx(customerId: string): Promise<LoanTransaction[]> {
+    return await this.loanTransactionSchema.aggregate([
+      {
+        $match: {
+          customerId,
+        },
+      },
+      {
+        $lookup: {
+          from: 'customers',
+          localField: 'customerId',
+          foreignField: 'id',
+          as: 'customer',
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          id: 1,
+          loanTypeId: 1,
+          instalmentTypeId: 1,
+          nominal: 1,
+          description: 1,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      },
+    ]);
+  }
+
+  async getLoanTrxById(id: string): Promise<ILoanTrx> {
+    const { customerUserId, loanTypeId, instalmentTypeId } =
+      await this.getLoanTrxAggregate(id);
+
+    const { customer, loanType, instalmentType } = await this.queryLoanTrx(
+      customerUserId,
+      loanTypeId,
+      instalmentTypeId,
+    );
+
+    const loanTransaction: LoanTransaction =
+      await this.loanTransactionSchema.findOne({ id });
+
+    return this.transformResponseLoanTrx(
+      loanTransaction,
+      customer,
+      loanType,
+      instalmentType,
+    );
+  }
+
+  async getLoanTrxAggregate(id?: string): Promise<ILoanTrxGetAggregate> {
     const loanTrx: ILoanTrxGetAggregate[] =
       await this.loanTransactionSchema.aggregate([
         {
           $match: {
-            id: id ? id : { $ne: null },
-            customerId: customerId ? customerId : { $ne: null },
+            ...(id && { id }),
           },
         },
         {
@@ -182,7 +229,7 @@ export class LoanTransactionService {
     userId: string,
     loanTypeId: string,
     instalmentTypeId: string,
-    session: ClientSession,
+    session?: ClientSession,
   ): Promise<{
     customer: IGetCustomer;
     loanType: LoanType;
