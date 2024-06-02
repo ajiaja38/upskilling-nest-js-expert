@@ -14,6 +14,7 @@ import { MessageModule } from './app/message/message.module';
 import { TimezoneModule } from './app/timezone/timezone.module';
 import { CacheModule } from '@nestjs/cache-manager';
 import { redisStore } from 'cache-manager-redis-yet';
+import { LoanModule } from './app/loan/loan.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { redisStore } from 'cache-manager-redis-yet';
     RoleModule,
     MessageModule,
     TimezoneModule,
+    LoanModule,
   ],
   controllers: [AppController],
   providers: [
