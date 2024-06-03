@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -17,6 +18,9 @@ import { InstalmentType } from '../instalment-type/schema/instalmentType.schema'
 import { IGetCustomer } from 'src/app/customer/dto/getCustomer.dto';
 import { ApproveRejectDto } from './dto/approveReject.dto';
 import { ILoanTrxGetAggregate } from './dto/loanTrxGetAggregate.dto';
+import { MessageService } from 'src/app/message/message.service';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 
 @Injectable()
 export class LoanTransactionService {
@@ -24,10 +28,14 @@ export class LoanTransactionService {
     @InjectModel(LoanTransaction.name)
     private loanTransactionSchema: Model<LoanTransaction>,
 
+    @Inject(CACHE_MANAGER)
+    private cacheService: Cache,
+
     private customerService: CustomerService,
     private loanTypeService: LoanTypeService,
     private instalmentTypeService: InstalmentTypeService,
     private timeZoneService: TimezoneService,
+    private messageService: MessageService,
   ) {}
 
   async createLoanTransaction(
@@ -69,6 +77,8 @@ export class LoanTransactionService {
 
       await session.commitTransaction();
 
+      this.messageService.setMessage('Create Loan Transaction Successfully');
+
       return this.transformResponseLoanTrx(
         createLoanTrx,
         customer,
@@ -84,36 +94,53 @@ export class LoanTransactionService {
   }
 
   async getAllLoanTrx(customerId: string): Promise<LoanTransaction[]> {
-    return await this.loanTransactionSchema.aggregate([
-      {
-        $match: {
-          customerId,
+    const cachedDataLoanUser: LoanTransaction[] = await this.cacheService.get<
+      LoanTransaction[]
+    >('AllLoanTransactionByCustomer');
+
+    if (cachedDataLoanUser) return cachedDataLoanUser;
+
+    this.messageService.setMessage('Get All Loan Transaction Successfully');
+    const result: LoanTransaction[] =
+      await this.loanTransactionSchema.aggregate([
+        {
+          $match: {
+            customerId,
+          },
         },
-      },
-      {
-        $lookup: {
-          from: 'customers',
-          localField: 'customerId',
-          foreignField: 'id',
-          as: 'customer',
+        {
+          $lookup: {
+            from: 'customers',
+            localField: 'customerId',
+            foreignField: 'id',
+            as: 'customer',
+          },
         },
-      },
-      {
-        $project: {
-          _id: 0,
-          id: 1,
-          loanTypeId: 1,
-          instalmentTypeId: 1,
-          nominal: 1,
-          description: 1,
-          createdAt: 1,
-          updatedAt: 1,
+        {
+          $project: {
+            _id: 0,
+            id: 1,
+            loanTypeId: 1,
+            instalmentTypeId: 1,
+            nominal: 1,
+            description: 1,
+            createdAt: 1,
+            updatedAt: 1,
+          },
         },
-      },
-    ]);
+      ]);
+
+    await this.cacheService.set('AllLoanTransactionByCustomer', result, 60000);
+
+    return result;
   }
 
   async getLoanTrxById(id: string): Promise<ILoanTrx> {
+    const loanTrxCacheData: ILoanTrx =
+      await this.cacheService.get<ILoanTrx>('loanTrxById');
+
+    if (loanTrxCacheData) return loanTrxCacheData;
+
     const { customerUserId, loanTypeId, instalmentTypeId } =
       await this.getLoanTrxAggregate(id);
 
@@ -126,12 +153,18 @@ export class LoanTransactionService {
     const loanTransaction: LoanTransaction =
       await this.loanTransactionSchema.findOne({ id });
 
-    return this.transformResponseLoanTrx(
+    this.messageService.setMessage('Get Loan Transaction Successfully');
+
+    const result: ILoanTrx = this.transformResponseLoanTrx(
       loanTransaction,
       customer,
       loanType,
       instalmentType,
     );
+
+    await this.cacheService.set('loanTrxById', result, 60000);
+
+    return result;
   }
 
   async getLoanTrxAggregate(id?: string): Promise<ILoanTrxGetAggregate> {
@@ -210,6 +243,8 @@ export class LoanTransactionService {
       );
 
       await session.commitTransaction();
+
+      this.messageService.setMessage('Update Loan Transaction Successfully');
 
       return this.transformResponseLoanTrx(
         updatedLoanTrx,

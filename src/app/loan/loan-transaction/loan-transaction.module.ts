@@ -10,6 +10,7 @@ import { TimezoneModule } from 'src/app/timezone/timezone.module';
 import { CustomerModule } from 'src/app/customer/customer.module';
 import { LoanTypeModule } from '../loan-type/loan-type.module';
 import { InstalmentTypeModule } from '../instalment-type/instalment-type.module';
+import { MessageModule } from 'src/app/message/message.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { InstalmentTypeModule } from '../instalment-type/instalment-type.module'
     LoanTypeModule,
     InstalmentTypeModule,
     TimezoneModule,
+    MessageModule,
   ],
   controllers: [LoanTransactionController],
   providers: [LoanTransactionService],
